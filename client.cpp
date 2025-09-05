@@ -135,3 +135,10 @@ static vector<string> split_colon_tokens(const string &cmd) {
 static bool is_supported_client_op(const string &op) {
   return op == "get" || op == "put" || op == "update" || op == "delete";
 }
+
+static bool valid_client_tokens(const vector<string> &parts) {
+  if (parts.empty()) return false;
+  if (parts[0] == "get" || parts[0] == "delete") return parts.size() >= 2;
+  if (parts[0] == "put" || parts[0] == "update") return parts.size() >= 3;
+  return false;
+}
