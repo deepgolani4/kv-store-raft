@@ -115,3 +115,7 @@ inline string safe_recv_trimmed(int fd) {
   while (!raw.empty() && (raw.back() == '\n' || raw.back() == '\r' || raw.back() == ' ')) raw.pop_back();
   return raw;
 }
+
+inline bool addr_has_port(const string &addr) {
+  return addr.find(':') != string::npos;
+}
