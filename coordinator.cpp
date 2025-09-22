@@ -100,3 +100,7 @@ static string format_peer_endpoint(const sockaddr_in &peer) {
 static bool has_valid_identity_doc(Document &doc) {
   return doc.HasMember("req_type") && doc["req_type"].IsString();
 }
+
+static void log_registration(const string &group_id, const string &addr) {
+    cerr << "register group=" << group_id << " addr=" << addr << "\n";
+}
