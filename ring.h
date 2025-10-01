@@ -127,3 +127,8 @@ inline bool ring_id_in_half_open_range(int id, int lo, int hi) {
   if (lo < hi) return lo <= id && id < hi;
   return (lo <= id && id < RING_SIZE) || (0 <= id && id < hi);
 }
+
+inline string ring_node_label(const RingNode *n) {
+  if (!n) return "<nil>";
+  return n->addr + "#" + to_string(n->id);
+}
