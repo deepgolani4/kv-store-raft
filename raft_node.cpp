@@ -382,3 +382,10 @@ static void erase_blank_keys(map<string, string> &table) {
   }
   for (const string &k : garbage) table.erase(k);
 }
+
+static bool is_known_node_role(const string &role) {
+  static const set<string> roles = {
+      "get", "put", "update", "delete", "leader", "pre",
+      "succ_of_succ", "new_ss_pre", "new_ss_succ", "new_ss_succ_of_succ"};
+  return roles.count(role) > 0;
+}
