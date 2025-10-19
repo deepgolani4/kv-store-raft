@@ -180,3 +180,8 @@ static bool is_supported_client_request(const string &op) {
 static bool should_invalidate_cache(const string &op) {
     return op == "update" || op == "delete";
 }
+
+static bool should_cache_get_response(const string &op, const string &payload) {
+    if (op != "get") return false;
+    return !payload.empty() && payload != "key_error";
+}

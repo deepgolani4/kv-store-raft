@@ -142,3 +142,10 @@ static bool valid_client_tokens(const vector<string> &parts) {
   if (parts[0] == "put" || parts[0] == "update") return parts.size() >= 3;
   return false;
 }
+
+static string trim_spaces(const string &s) {
+  size_t i = 0, j = s.size();
+  while (i < j && isspace(static_cast<unsigned char>(s[i]))) i++;
+  while (j > i && isspace(static_cast<unsigned char>(s[j - 1]))) j--;
+  return s.substr(i, j - i);
+}

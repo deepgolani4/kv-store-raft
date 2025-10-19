@@ -96,3 +96,7 @@ string msg_health_ping(const string &node) {
 string msg_health_pong(const string &node, const string &status) {
     return "{\"req_type\":\"health_pong\",\"node\":\"" + node + "\",\"status\":\"" + status + "\"}";
 }
+
+string msg_client_error(const string &reason) {
+    return "{\"req_type\":\"client_error\",\"message\":\"" + reason + "\"}";
+}
