@@ -389,3 +389,18 @@ static bool is_known_node_role(const string &role) {
       "succ_of_succ", "new_ss_pre", "new_ss_succ", "new_ss_succ_of_succ"};
   return roles.count(role) > 0;
 }
+
+static vector<string> split_tokens(const string &raw, char delim) {
+  vector<string> out;
+  string cur;
+  for (char c : raw) {
+    if (c == delim) {
+      out.push_back(cur);
+      cur.clear();
+    } else {
+      cur.push_back(c);
+    }
+  }
+  out.push_back(cur);
+  return out;
+}

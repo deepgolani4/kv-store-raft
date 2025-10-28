@@ -149,3 +149,7 @@ static string trim_spaces(const string &s) {
   while (j > i && isspace(static_cast<unsigned char>(s[j - 1]))) j--;
   return s.substr(i, j - i);
 }
+
+static string render_usage_line() {
+  return "get:<key> | put:<key>:<value> | update:<key>:<value> | delete:<key>";
+}

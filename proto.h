@@ -100,3 +100,7 @@ string msg_health_pong(const string &node, const string &status) {
 string msg_client_error(const string &reason) {
     return "{\"req_type\":\"client_error\",\"message\":\"" + reason + "\"}";
 }
+
+string msg_kv_error(const string &reason) {
+    return "{\"req_type\":\"ack\",\"message\":\"" + reason + "\"}";
+}

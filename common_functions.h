@@ -119,3 +119,10 @@ inline string safe_recv_trimmed(int fd) {
 inline bool addr_has_port(const string &addr) {
   return addr.find(':') != string::npos;
 }
+
+inline string trim_copy(const string &s) {
+  size_t i = 0, j = s.size();
+  while (i < j && isspace(static_cast<unsigned char>(s[i]))) i++;
+  while (j > i && isspace(static_cast<unsigned char>(s[j - 1]))) j--;
+  return s.substr(i, j - i);
+}
