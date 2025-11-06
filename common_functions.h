@@ -126,3 +126,8 @@ inline string trim_copy(const string &s) {
   while (j > i && isspace(static_cast<unsigned char>(s[j - 1]))) j--;
   return s.substr(i, j - i);
 }
+
+inline long now_epoch_ms() {
+  using namespace chrono;
+  return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}

@@ -185,3 +185,8 @@ static bool should_cache_get_response(const string &op, const string &payload) {
     if (op != "get") return false;
     return !payload.empty() && payload != "key_error";
 }
+
+static string fallback_leader_for_group(const string &group_id) {
+    if (!raft_groups.count(group_id) || raft_groups[group_id].empty()) return "";
+    return raft_groups[group_id][0];
+}

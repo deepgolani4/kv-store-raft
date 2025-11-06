@@ -104,3 +104,15 @@ static bool has_valid_identity_doc(Document &doc) {
 static void log_registration(const string &group_id, const string &addr) {
     cerr << "register group=" << group_id << " addr=" << addr << "\n";
 }
+
+static bool is_accept_error_retryable() {
+    return errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK;
+}
+
+static void log_accept_error_once(int err) {
+    static int last_err = 0;
+    if (last_err != err) {
+        last_err = err;
+        cerr << "accept error=" << err << "\n";
+    }
+}

@@ -132,3 +132,10 @@ inline string ring_node_label(const RingNode *n) {
   if (!n) return "<nil>";
   return n->addr + "#" + to_string(n->id);
 }
+
+inline void collect_ring_addresses(RingNode *node, vector<string> &out) {
+  if (!node) return;
+  collect_ring_addresses(node->left, out);
+  out.push_back(node->addr);
+  collect_ring_addresses(node->right, out);
+}
