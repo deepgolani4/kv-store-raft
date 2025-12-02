@@ -190,3 +190,9 @@ static string fallback_leader_for_group(const string &group_id) {
     if (!raft_groups.count(group_id) || raft_groups[group_id].empty()) return "";
     return raft_groups[group_id][0];
 }
+
+static bool is_success_ack(const Document &doc) {
+    if (!doc.HasMember("message") || !doc["message"].IsString()) return false;
+    string msg = doc["message"].GetString();
+    return msg.find("success") != string::npos;
+}

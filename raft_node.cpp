@@ -408,3 +408,7 @@ static vector<string> split_tokens(const string &raw, char delim) {
 static string compact_table_hint(size_t own_sz, size_t prev_sz) {
   return "own=" + to_string(own_sz) + ",prev=" + to_string(prev_sz);
 }
+
+static bool should_snapshot_now(size_t log_size, size_t threshold) {
+  return threshold > 0 && log_size >= threshold;
+}

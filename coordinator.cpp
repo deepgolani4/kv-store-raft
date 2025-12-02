@@ -116,3 +116,9 @@ static void log_accept_error_once(int err) {
         cerr << "accept error=" << err << "\n";
     }
 }
+
+static string request_stats_summary() {
+    return "total=" + to_string(coordinator_stats.total_requests) +
+           ",cache_hits=" + to_string(coordinator_stats.cache_hits) +
+           ",redirects=" + to_string(coordinator_stats.redirects);
+}

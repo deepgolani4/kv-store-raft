@@ -153,3 +153,10 @@ static string trim_spaces(const string &s) {
 static string render_usage_line() {
   return "get:<key> | put:<key>:<value> | update:<key>:<value> | delete:<key>";
 }
+
+static bool should_print_banner_once() {
+  static bool printed = false;
+  if (printed) return false;
+  printed = true;
+  return true;
+}

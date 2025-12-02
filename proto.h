@@ -104,3 +104,7 @@ string msg_client_error(const string &reason) {
 string msg_kv_error(const string &reason) {
     return "{\"req_type\":\"ack\",\"message\":\"" + reason + "\"}";
 }
+
+string msg_debug_note(const string &note) {
+    return "{\"req_type\":\"debug\",\"message\":\"" + note + "\"}";
+}

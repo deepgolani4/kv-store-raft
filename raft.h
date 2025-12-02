@@ -193,3 +193,14 @@ static bool is_mutation_role(const string &role) {
 static bool is_rpc_name(const string &rpc) {
     return rpc == "append_entries" || rpc == "request_vote" || rpc == "install_snapshot";
 }
+
+static bool should_redirect_request(RaftNode *node) {
+    return node && node->role != Role::LEADER;
+}
+
+static OpType role_to_op(const string &role) {
+    if (role == "put") return OpType::PUT;
+    if (role == "update") return OpType::UPDATE;
+    if (role == "delete") return OpType::DELETE;
+    return OpType::NOOP;
+}
