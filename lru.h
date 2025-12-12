@@ -1,6 +1,9 @@
 #pragma once
+
+#include <cctype>
 #include <string>
 #include <unordered_map>
+
 using namespace std;
 
 struct LRUNode {
@@ -29,7 +32,7 @@ class LRUCache {
       n->prev->next = n->next;
       n->next->prev = n->prev;
     }
-    free(n);
+    delete n;
   }
 
   void push_front(const string &k, const string &v) {
@@ -46,8 +49,7 @@ class LRUCache {
   }
 
   void move_to_front(LRUNode *n) {
-    if (n == head)
-      return;
+    if (n == head) return;
     if (n == tail) {
       tail = n->prev;
       tail->next = nullptr;
@@ -65,60 +67,41 @@ public:
   explicit LRUCache(int cap = 0) : capacity(cap) {}
 
   void put(const string &k, const string &v) {
-    if (!capacity || index.count(k))
-      return;
-    if (count >= capacity)
-      evict(tail);
+    if (!capacity || index.count(k)) return;
+    if (count >= capacity) evict(tail);
     push_front(k, v);
   }
 
   void update(const string &k, const string &v) {
-    if (!capacity)
-      return;
+    if (!capacity) return;
     auto it = index.find(k);
-    if (it == index.end())
-      return;
+    if (it == index.end()) return;
     it->second->value = v;
     move_to_front(it->second);
   }
 
   string get(const string &k) {
-    if (!capacity)
-      return "";
+    if (!capacity) return "";
     auto it = index.find(k);
-    if (it == index.end())
-      return "";
+    if (it == index.end()) return "";
     move_to_front(it->second);
     return it->second->value;
   }
 
   void remove(const string &k) {
     auto it = index.find(k);
-    if (it != index.end())
-      evict(it->second);
+    if (it != index.end()) evict(it->second);
   }
 
   bool contains(const string &k) const { return index.count(k); }
 };
 
-LRUCache cache(4);
+inline LRUCache cache(4);
 
 inline string normalize_cache_key(const string &key) {
   string out = key;
-  for (char &c : out) c = static_cast<char>(tolower(c));
+  for (char &c : out) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
   return out;
 }
 
-inline bool cacheable_value(const string &v) {
-  return !v.empty() && v != "key_error";
-}
-
-inline string normalize_cache_key(const string &key) {
-  string out = key;
-  for (char &c : out) c = static_cast<char>(tolower(c));
-  return out;
-}
-
-inline bool cacheable_value(const string &v) {
-  return !v.empty() && v != "key_error";
-}
+inline bool cacheable_value(const string &v) { return !v.empty() && v != "key_error"; }

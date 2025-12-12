@@ -1,34 +1,47 @@
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
+
 #include "common_functions.h"
 #include "proto.h"
 #include "rapidjson/document.h"
-#include "rapidjson/stringbuffer.h"
-#include "rapidjson/writer.h"
-#include <bits/stdc++.h>
+
 using namespace rapidjson;
 using namespace std;
 
 #define CS_CONFIG "cs_config.txt"
 
-void print_response(const string &json) {
+static void print_response(const string &json) {
   Document doc;
   string s = json;
-  if (doc.ParseInsitu((char *)s.c_str()).HasParseError())
+  if (doc.ParseInsitu((char *)s.data()).HasParseError()) {
+    printf("invalid_response\n");
     return;
-  printf("%s\n", doc["message"].GetString());
+  }
+  if (doc.HasMember("message") && doc["message"].IsString()) {
+    printf("%s\n", doc["message"].GetString());
+  } else {
+    printf("invalid_response\n");
+  }
 }
 
-void do_get_delete(int fd, const string &op, const string &key) {
-  net_send(fd, msg_get_delete(op, key));
-  print_response(net_recv(fd));
+static vector<string> split_colon_tokens(const string &cmd) {
+  vector<string> out;
+  string cur;
+  for (char ch : cmd) {
+    if (ch == ':') {
+      out.push_back(cur);
+      cur.clear();
+    } else {
+      cur.push_back(ch);
+    }
+  }
+  out.push_back(cur);
+  return out;
 }
 
-void do_put_update(int fd, const string &op, const string &key,
-                   const string &val) {
-  net_send(fd, msg_put_update(op, key, val));
-  print_response(net_recv(fd));
-}
-
-int main(int argc, char **argv) {
+int main(int argc, char **) {
   if (argc <= 2) {
     fprintf(stderr, "usage: client <ip> <port>\n");
     return 1;
@@ -38,125 +51,39 @@ int main(int argc, char **argv) {
   ifstream f(CS_CONFIG);
   getline(f, cs_ip);
   getline(f, cs_port);
+  if (cs_ip.empty() || cs_port.empty()) {
+    fprintf(stderr, "cs_config.txt missing. start coordinator first.\n");
+    return 1;
+  }
 
-  int fd = make_tcp_server(argv[1], argv[2]);
+  int fd = make_tcp_client();
   tcp_connect(fd, cs_ip, cs_port);
   net_recv(fd);
   net_send(fd, msg_identity("client"));
   net_recv(fd);
 
-  printf("commands: get:<key>  put:<key>:<val>  update:<key>:<val>  "
-         "delete:<key>  exit\n");
+  printf("commands: get:<key>  put:<key>:<val>  update:<key>:<val>  delete:<key>  exit\n");
   while (true) {
     printf(">> ");
     string cmd;
     cin >> cmd;
-    if (cmd == "exit")
-      break;
+    if (cmd == "exit") break;
 
-    char buf[1024];
-    strncpy(buf, cmd.c_str(), sizeof(buf) - 1);
-    string op = strtok(buf, ":");
+    vector<string> parts = split_colon_tokens(cmd);
+    if (parts.empty()) continue;
 
-    if (op == "get" || op == "delete") {
-      do_get_delete(fd, op, strtok(nullptr, ":"));
-    } else if (op == "put" || op == "update") {
-      string key = strtok(nullptr, ":");
-      string val = strtok(nullptr, ":");
-      do_put_update(fd, op, key, val);
+    const string &op = parts[0];
+    if ((op == "get" || op == "delete") && parts.size() >= 2) {
+      net_send(fd, msg_get_delete(op, parts[1]));
+      print_response(net_recv(fd));
+    } else if ((op == "put" || op == "update") && parts.size() >= 3) {
+      net_send(fd, msg_put_update(op, parts[1], parts[2]));
+      print_response(net_recv(fd));
+    } else {
+      printf("invalid command\n");
     }
   }
-}
 
-static vector<string> split_colon_tokens(const string &cmd) {
-  vector<string> out;
-  string cur;
-  for (char ch : cmd) {
-    if (ch == ':') {
-      out.push_back(cur);
-      cur.clear();
-      continue;
-    }
-    cur.push_back(ch);
-  }
-  out.push_back(cur);
-  return out;
-}
-
-static bool is_supported_client_op(const string &op) {
-  return op == "get" || op == "put" || op == "update" || op == "delete";
-}
-
-static vector<string> split_colon_tokens(const string &cmd) {
-  vector<string> out;
-  string cur;
-  for (char ch : cmd) {
-    if (ch == ':') {
-      out.push_back(cur);
-      cur.clear();
-      continue;
-    }
-    cur.push_back(ch);
-  }
-  out.push_back(cur);
-  return out;
-}
-
-static bool is_supported_client_op(const string &op) {
-  return op == "get" || op == "put" || op == "update" || op == "delete";
-}
-
-static string trim_spaces(const string &s) {
-  size_t i = 0, j = s.size();
-  while (i < j && isspace(static_cast<unsigned char>(s[i]))) i++;
-  while (j > i && isspace(static_cast<unsigned char>(s[j - 1]))) j--;
-  return s.substr(i, j - i);
-}
-
-static bool has_min_parts(const vector<string> &parts, size_t expected) {
-  return parts.size() >= expected;
-}
-
-static vector<string> split_colon_tokens(const string &cmd) {
-  vector<string> out;
-  string cur;
-  for (char ch : cmd) {
-    if (ch == ':') {
-      out.push_back(cur);
-      cur.clear();
-      continue;
-    }
-    cur.push_back(ch);
-  }
-  out.push_back(cur);
-  return out;
-}
-
-static bool is_supported_client_op(const string &op) {
-  return op == "get" || op == "put" || op == "update" || op == "delete";
-}
-
-static bool valid_client_tokens(const vector<string> &parts) {
-  if (parts.empty()) return false;
-  if (parts[0] == "get" || parts[0] == "delete") return parts.size() >= 2;
-  if (parts[0] == "put" || parts[0] == "update") return parts.size() >= 3;
-  return false;
-}
-
-static string trim_spaces(const string &s) {
-  size_t i = 0, j = s.size();
-  while (i < j && isspace(static_cast<unsigned char>(s[i]))) i++;
-  while (j > i && isspace(static_cast<unsigned char>(s[j - 1]))) j--;
-  return s.substr(i, j - i);
-}
-
-static string render_usage_line() {
-  return "get:<key> | put:<key>:<value> | update:<key>:<value> | delete:<key>";
-}
-
-static bool should_print_banner_once() {
-  static bool printed = false;
-  if (printed) return false;
-  printed = true;
-  return true;
+  close(fd);
+  return 0;
 }
