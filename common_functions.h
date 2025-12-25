@@ -2,29 +2,19 @@
 
 #include <arpa/inet.h>
 #include <chrono>
-#include <cctype>
+#include <cerrno>
 #include <cstring>
-#include <iostream>
+#include <cstdio>
+#include <cstdlib>
+#include <fcntl.h>
+#include <fstream>
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
-using namespace std;
-
-#define RING_SIZE 31
-#define BUFF_SIZE 1024
-#define UDP_PORT 3769
-#define HASH_MUL 99999989
-
-inline int ring_hash(const string &s) {
-  int j = RING_SIZE;
-  int h = 0;
-  for (char c : s) h = (h + (static_cast<int>(c) * HASH_MUL) % j) % j;
-  return (h + j) % j;
-}
-
-inline int make_tcp_server(const string &ip, const string &port) {
+inline int make_tcp_server(const std::string &ip, const std::string &port) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
     perror("socket");
@@ -38,7 +28,7 @@ inline int make_tcp_server(const string &ip, const string &port) {
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = inet_addr(ip.c_str());
-  addr.sin_port = htons(stoi(port));
+  addr.sin_port = htons(static_cast<uint16_t>(std::stoi(port)));
   if (::bind(fd, (sockaddr *)&addr, sizeof(addr)) < 0) {
     perror("bind");
     exit(1);
@@ -60,62 +50,86 @@ inline int make_tcp_client() {
   return fd;
 }
 
-inline void tcp_connect(int fd, const string &ip, const string &port) {
+inline bool tcp_connect(int fd, const std::string &ip, const std::string &port) {
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = inet_addr(ip.c_str());
-  addr.sin_port = htons(stoi(port));
-  if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0) {
-    perror("connect");
-    exit(1);
+  addr.sin_port = htons(static_cast<uint16_t>(std::stoi(port)));
+  while (true) {
+    if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) == 0) return true;
+    if (errno != EINTR) return false;
   }
 }
 
-inline void net_send(int fd, const string &msg) {
-  char buf[BUFF_SIZE];
-  strncpy(buf, msg.c_str(), BUFF_SIZE - 1);
-  buf[BUFF_SIZE - 1] = '\0';
-  ::send(fd, buf, sizeof(buf), 0);
+inline bool send_all(int fd, const std::string &data) {
+  size_t sent = 0;
+  while (sent < data.size()) {
+    ssize_t n = ::send(fd, data.data() + sent, data.size() - sent, 0);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    sent += static_cast<size_t>(n);
+  }
+  return true;
 }
 
-inline string net_recv(int fd) {
-  char buf[BUFF_SIZE] = {0};
-  ::recv(fd, buf, BUFF_SIZE, 0);
-  return string(buf);
+inline bool send_line(int fd, const std::string &line) {
+  return send_all(fd, line + "\n");
 }
 
-inline pair<string, string> split_addr(const string &addr) {
+inline bool recv_line(int fd, std::string &out) {
+  out.clear();
+  char ch = 0;
+  while (true) {
+    ssize_t n = ::recv(fd, &ch, 1, 0);
+    if (n == 0) return !out.empty();
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (ch == '\n') return true;
+    if (ch != '\r') out.push_back(ch);
+  }
+}
+
+inline std::string recv_line_or_empty(int fd) {
+  std::string out;
+  if (!recv_line(fd, out)) return "";
+  return out;
+}
+
+inline std::pair<std::string, std::string> split_addr(const std::string &addr) {
   size_t pos = addr.find(':');
-  if (pos == string::npos) return {addr, ""};
+  if (pos == std::string::npos) return {addr, ""};
   return {addr.substr(0, pos), addr.substr(pos + 1)};
 }
 
-inline bool is_numeric_port_string(const string &port) {
-  if (port.empty()) return false;
-  for (char c : port)
-    if (!isdigit(static_cast<unsigned char>(c))) return false;
-  int p = stoi(port);
-  return p > 0 && p <= 65535;
-}
-
-inline string safe_recv_trimmed(int fd) {
-  string raw = net_recv(fd);
-  while (!raw.empty() && (raw.back() == '\n' || raw.back() == '\r' || raw.back() == ' ')) {
-    raw.pop_back();
+inline std::vector<std::string> split_string(const std::string &s, char delim) {
+  std::vector<std::string> out;
+  size_t start = 0;
+  while (true) {
+    size_t pos = s.find(delim, start);
+    if (pos == std::string::npos) {
+      out.push_back(s.substr(start));
+      return out;
+    }
+    out.push_back(s.substr(start, pos - start));
+    start = pos + 1;
   }
-  return raw;
 }
 
-inline bool addr_has_port(const string &addr) { return addr.find(':') != string::npos; }
-
-inline string trim_copy(const string &s) {
-  size_t i = 0, j = s.size();
-  while (i < j && isspace(static_cast<unsigned char>(s[i]))) i++;
-  while (j > i && isspace(static_cast<unsigned char>(s[j - 1]))) j--;
-  return s.substr(i, j - i);
+inline std::string join_fields(const std::vector<std::string> &fields, char delim) {
+  if (fields.empty()) return "";
+  std::string out = fields[0];
+  for (size_t i = 1; i < fields.size(); i++) {
+    out.push_back(delim);
+    out += fields[i];
+  }
+  return out;
 }
 
 inline long now_epoch_ms() {
-  using namespace chrono;
+  using namespace std::chrono;
   return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }

@@ -1,0 +1,5 @@
+*.log
+/client
+/raft_node
+/coordinator
+/cs_config.txt

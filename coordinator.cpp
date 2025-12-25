@@ -1,76 +1,141 @@
 #include <arpa/inet.h>
 #include <cerrno>
+#include <condition_variable>
 #include <cstdio>
-#include <cstring>
-#include <iostream>
-#include <pthread.h>
+#include <fstream>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "common_functions.h"
-#include "coordinator_ops.h"
-#include "coordinator_state.h"
-#include "proto.h"
-#include "rapidjson/document.h"
 
-using namespace rapidjson;
-using namespace std;
+namespace {
 
-void *handle_connection(void *arg) {
-  auto *args = (ClientThreadArgs *)arg;
-  int fd = args->sockfd;
-  delete args;
+std::mutex g_mu;
+std::condition_variable g_leader_cv;
+std::string g_current_leader;
 
-  net_send(fd, msg_ack("ack", "connected"));
-  string id_msg = net_recv(fd);
-
-  Document doc;
-  string s = id_msg;
-  if (doc.ParseInsitu((char *)s.data()).HasParseError()) {
-    net_send(fd, msg_ack("ack", "parse_error"));
-    close(fd);
-    return nullptr;
-  }
-
-  string req_type = doc.HasMember("req_type") && doc["req_type"].IsString() ? doc["req_type"].GetString() : "";
-
-  if (req_type == "identity") {
-    string id = doc.HasMember("id") && doc["id"].IsString() ? doc["id"].GetString() : "";
-    if (id == "client") {
-      net_send(fd, msg_ack("ack", "ready_to_serve"));
-      serve_client(fd);
-    } else {
-      net_send(fd, msg_ack("ack", "unknown_identity"));
-    }
-  } else if (req_type == "node_join") {
-    string group_id = doc.HasMember("group") && doc["group"].IsString() ? doc["group"].GetString() : "";
-    string addr = doc.HasMember("addr") && doc["addr"].IsString() ? doc["addr"].GetString() : "";
-    if (group_id.empty() || addr.empty()) {
-      net_send(fd, msg_ack("ack", "invalid_node_join"));
-    } else {
-      register_raft_node(group_id, addr);
-      net_send(fd, msg_ack("ack", "registration_successful"));
-    }
-  } else {
-    net_send(fd, msg_ack("ack", "unknown_req_type"));
-  }
-
-  close(fd);
-  return nullptr;
+void write_cs_config(const std::string &ip, const std::string &port) {
+  std::ofstream f("cs_config.txt");
+  f << ip << "\n" << port << "\n";
 }
+
+void register_node(const std::string &, const std::string &) {
+}
+
+void set_current_leader(const std::string &leader_addr) {
+  std::lock_guard<std::mutex> lk(g_mu);
+  g_current_leader = leader_addr;
+  g_leader_cv.notify_all();
+}
+
+void clear_current_leader_if_match(const std::string &leader_addr) {
+  std::lock_guard<std::mutex> lk(g_mu);
+  if (g_current_leader == leader_addr) g_current_leader.clear();
+}
+
+std::string get_current_leader_snapshot() {
+  std::lock_guard<std::mutex> lk(g_mu);
+  return g_current_leader;
+}
+
+std::string wait_for_leader() {
+  std::unique_lock<std::mutex> lk(g_mu);
+  while (g_current_leader.empty()) {
+    g_leader_cv.wait(lk);
+  }
+  return g_current_leader;
+}
+
+std::string send_request_line(const std::string &target_addr, const std::string &line) {
+  auto [ip, port] = split_addr(target_addr);
+
+  int fd = make_tcp_client();
+  if (!tcp_connect(fd, ip, port)) {
+    close(fd);
+    return "err:no_nodes_available";
+  }
+  if (!send_line(fd, line)) {
+    close(fd);
+    return "err:no_nodes_available";
+  }
+
+  std::string resp = recv_line_or_empty(fd);
+  close(fd);
+  if (resp.empty()) return "err:no_nodes_available";
+  return resp;
+}
+
+bool is_retryable_response(const std::string &resp) {
+  return resp == "err:not_leader" || resp == "err:no_nodes_available" || resp == "err:commit_failed";
+}
+
+std::string forward_to_leader(const std::string &cmd_line) {
+  std::string leader_addr = wait_for_leader();
+  std::string resp = send_request_line(leader_addr, cmd_line);
+  if (is_retryable_response(resp)) {
+    clear_current_leader_if_match(leader_addr);
+    leader_addr = wait_for_leader();
+    resp = send_request_line(leader_addr, cmd_line);
+  }
+  return resp;
+}
+
+void serve_client_stream(int fd, std::string first_line) {
+  std::string line = first_line;
+  while (!line.empty()) {
+    send_line(fd, forward_to_leader(line));
+    if (!recv_line(fd, line)) break;
+  }
+}
+
+void handle_connection(int fd) {
+  std::string first_line = recv_line_or_empty(fd);
+  if (first_line.empty()) {
+    close(fd);
+    return;
+  }
+
+  std::vector<std::string> parts = split_string(first_line, '|');
+  if (parts[0] == "node_join") {
+    register_node(parts[1], parts[2]);
+    send_line(fd, "ok:node_registered");
+    close(fd);
+    return;
+  }
+
+  if (parts[0] == "leader_announce") {
+    set_current_leader(parts[1]);
+    send_line(fd, "ok:leader_updated");
+    close(fd);
+    return;
+  }
+
+  if (first_line == "leader_sync") {
+    send_line(fd, join_fields({"leader", get_current_leader_snapshot()}, '|'));
+    close(fd);
+    return;
+  }
+
+  serve_client_stream(fd, first_line);
+  close(fd);
+}
+
+}  // namespace
 
 int main(int argc, char **argv) {
   if (argc <= 2) {
     fprintf(stderr, "usage: coordinator <ip> <port>\n");
     return 1;
   }
-  string ip = argv[1], port = argv[2];
+  std::string ip = argv[1], port = argv[2];
 
   write_cs_config(ip, port);
 
   int server_fd = make_tcp_server(ip, port);
   listen(server_fd, 32);
 
-  pthread_t threads[128];
-  int i = 0;
   while (true) {
     sockaddr_in peer{};
     socklen_t len = sizeof(peer);
@@ -80,13 +145,6 @@ int main(int argc, char **argv) {
       perror("accept");
       continue;
     }
-
-    char peer_ip[INET_ADDRSTRLEN] = {0};
-    inet_ntop(AF_INET, &peer.sin_addr, peer_ip, INET_ADDRSTRLEN);
-    string peer_addr = string(peer_ip) + ":" + to_string(ntohs(peer.sin_port));
-
-    auto *targs = new ClientThreadArgs{conn, peer_addr, ip + ":" + port};
-    pthread_create(&threads[i % 128], nullptr, handle_connection, targs);
-    pthread_detach(threads[i++ % 128]);
+    std::thread(handle_connection, conn).detach();
   }
 }
