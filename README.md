@@ -1,24 +1,46 @@
-# KV Store with Raft
+# KV Store with Coordinator Routing
 
-A simple distributed key-value store prototype using Raft-style coordination.
+A distributed key-value store prototype in C++.
 
-## What It Includes
+## Components
+- `coordinator`: accepts client requests, tracks registered nodes, routes key operations.
+- `raft_node`: storage node process (currently single-node semantics per key-group in this runnable version).
+- `client`: CLI to run `get`, `put`, `update`, `delete`.
 
-- `coordinator.cpp`: accepts client requests and routes them
-- `raft_node.cpp`: node-side key/value + replication logic
-- `client.cpp`: simple CLI for `get`, `put`, `update`, `delete`
+## Build (macOS/Linux)
+```bash
+make
+```
 
-## Build
+Or explicitly:
+```bash
+c++ -std=c++17 -pthread coordinator.cpp -o coordinator
+c++ -std=c++17 -pthread raft_node.cpp -o raft_node
+c++ -std=c++17 -pthread client.cpp -o client
+```
 
-Compile with your preferred C++ compiler (g++/clang++).
+## Run
+Terminal 1:
+```bash
+./coordinator 127.0.0.1 9000
+```
 
-## Run (Quick Start)
+Terminal 2:
+```bash
+./raft_node 127.0.0.1 9101
+```
 
-1. Start the coordinator.
-2. Start one or more raft nodes.
-3. Run the client and issue commands.
+Terminal 3:
+```bash
+./client 127.0.0.1 9200
+```
 
-## Notes
+Client commands:
+- `put:<key>:<value>`
+- `get:<key>`
+- `update:<key>:<value>`
+- `delete:<key>`
+- `exit`
 
-- This is a learning/prototype project, not production-ready.
-- Network addresses and ports must match across components.
+## Status
+This is still a prototype codebase. The current runnable path is coordinator + storage node + client.
